@@ -25,6 +25,7 @@ library(blandr)
 library(gratia) #tools to extend plotting and analysis of mgcv models by Pederson et al
 library(performance)
 library(GGally)
+library(stringr)
 
 ```
 
@@ -559,9 +560,9 @@ for (t in 1:6){ #t is task}
   temp.data<-data.frame(matrix(NA,nrow=nrow(summary.data),ncol=3))
   #yet more cols needed to hold GAM results
   
-  addbit<-data.frame(matrix(NA,nrow=nrow(summary.data),ncol=9))
+  addbit<-data.frame(matrix(NA,nrow=nrow(summary.data),ncol=10))
   #interaction term saved as LI.est. 
-  names(addbit)<-c('param1','param2','param3','LI.est','LIest.se','p.interact','R2','AIC','BIC')
+  names(addbit)<-c('param1','param2','param3','LI.est','LIest.se','p.interact','R2','AIC','BIC','Npts')
   
   temp.data<-cbind(temp.data,addbit)
   colnames(temp.data)[1:3]<-c('LI.mean','LI.N','LI.se')
@@ -601,17 +602,23 @@ for (t in 1:6){ #t is task}
   
   modelout <- modelfit(j,longdata,temp.data)
  temp.data<-modelout[[1]]
+
 } #next subject
 
 #When all subjects are done, bolt temp.data on to summary.data, after specifying the task.
+
+ #First need to flip polarity of the LI estimate as it is based on R effect vs L 
+ temp.data$LI.est<-temp.data$LI.est*-1 
+  
 tempnames<-colnames(temp.data)
 colnames(temp.data)<-paste0(alltimings$task[t],"_",tempnames)
 tempnames2<-colnames(temp.data) #new column names with task prefix
  #Have we already created these cols in summary.data?
-wantcols<- which(colnames(summary.data) % in% tempnames2)
+wantcols<- which(colnames(summary.data) %in% tempnames2)
 if(length(wantcols)==0){ #if they don't exist, add them with NA values
   summary.data[,tempnames2]<-NA
 }
+#Need to flip polarity of LI.est from model
 
   summary.data[jrange,tempnames2]<-temp.data[jrange,] #write new data in jrange
 
@@ -623,3 +630,84 @@ write.csv(summary.data,here('dumpGAMsummary.csv'))
   
 
 ```
+
+Now look at correlations to check all makes sense.
+
+```{r corrpairs}
+
+mycols<-c( "mean_LI","LI.mean","LI.est")
+
+for (t in 1:6){
+  col1<-paste0(LETTERS[t],"_",mycols[1])
+  col2<-paste0(alltimings$task[t],"_",mycols[2])
+  col3<-paste0(alltimings$task[t],"_",mycols[3])
+allcols<-c(which(colnames(summary.data) ==col1),
+           which(colnames(summary.data) ==col2),
+           which(colnames(summary.data) ==col3))
+
+ggpairs(summary.data[,allcols],columnLabels = c("Orig LI", "recalc.mean.LI","GAM LI"))
+plotname<- paste0("plots/",alltimings$task[t],"_LIpairs.jpg")
+ggsave(plotname,height=6,width=6)
+}
+# 
+
+```
+
+The paired plots confirm that there is very good agreement between the recomputed LI and the original LI - though there are just a few cases that are discrepant, but I think not enough to cause concern.
+
+The plots also confirm that, as in the Thompson et al paper, the agreement between the LI estimates from GAM and the LI estimates from mean in POI is high. 
+
+Next point of interest is to look more closely at distributions for the GAM estimates. Can plot these for each task with handedness colour coded, and look at mean of distribution and also at whether lateralisation is significant. GAM gives us 2 easy ways to check that - we have a SE estimate for each LI, and we also have a p-value that gives conventional significance.  This means we can categorise people as L, R or bilateral for language tasks, depending on direction and significance of the effect.
+(NB we can also do that for the original mean-based LI, but the SEs tend to be a lot bigger, and that means more people are categorised as bilateral).
+
+Pirateplots based on COLA analysis.
+```{r LIpirates, echo=FALSE, warning=FALSE,message=F}
+
+
+#Make task names that will print on 2 lines for compactness
+tasknames2 <- c("Word\ngeneration","Sentence\ngeneration","Phonological\ndecision","Word\ndecision","Sentence\ndecision","Syntactic\ndecision")
+#Now make text locations for these on pirate plot: we'll place A-C below plot and D-F above it
+horizpts<-rep(1,6)
+for (i in 1:6){
+  horizpts[i] <- 1+(i-1)*3
+}
+vertpts <- rep(-5.5,6)
+vertpts[4:6]<-6
+
+LIdata <- summary.data %>% 
+  dplyr::select(Gorilla_ID, Hand_R,WG_LI.est,  SG_LI.est, PD_LI.est,WC_LI.est, SC_LI.est, SD_LI.est )
+colnames(LIdata) <- c('ID','Handed','1A','2BV','3C','4D','5E','6F')
+LIdata$Handed <- as.factor(LIdata$Handed)
+levels(LIdata$Handed)<-c("L","R")
+longdata.d <- pivot_longer(data = LIdata, cols = c(3:8), names_to = 'Task', values_to = 'LI')
+longdata.d$Task <- as.factor(longdata.d$Task)
+levels(longdata.d$Task)<-c('A','B','C','D','E','F')
+
+ 
+setEPS() #NB got conversion failure when I try to open resulting eps file - but pdf does work
+cairo_ps(here('plots/ftcd_pirates.eps'), fallback_resolution=300, width=19/2.54, height=15/2.54) # convert width and height to inches
+pirateplot(data = longdata.d, LI ~ Handed * Task, ylim=c(-6,8))
+
+abline(h=0)
+
+for (i in 1:6){
+  text(horizpts[i], vertpts[i], tasknames2[i], #add label for task
+     cex = .8)
+}
+dev.off()
+#pdf version for graphical abstract
+pdf(file='plots/piratepdf.pdf',width=7,height=4)
+pirateplot(data = longdata.d, LI ~ Handed * Task, ylim=c(-6,8))
+
+abline(h=0)
+
+for (i in 1:6){
+  text(horizpts[i], vertpts[i], tasknames2[i], #add label for task
+     cex = .8)
+}
+dev.off()
+
+```
+
+
+
