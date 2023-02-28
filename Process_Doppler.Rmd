@@ -29,20 +29,21 @@ library(GGally)
 ```
 
 
-Aim of this script is to apply the analysis described here:  
+Aim of this script is to apply the GAM2 analysis described here:  
 https://onlinelibrary.wiley.com/doi/full/10.1002/hbm.26138  
 to the participants who did fMRI in the COLA project.  
 
 The scripts and datasets for the Thompson et al study are here:  
 https://osf.io/gw4en/  
 
-Original raw Doppler files from COLA are here: https://osf.io/uxdm6
+Original raw Doppler .exp files from COLA are here: https://osf.io/uxdm6
 They have been downloaded and save to project as zip folder.
 
 Processed summary data from COLA are here: https://osf.io/2wdej  
 Downloaded and saved to project as ftcd_COLA_summary.csv  
 
-
+N.B. The .exp files do not have a uniform format. This will happen if the settings for the Doppler recording were different at different sites. It does not affect the signal - it's just a case of whether spurious channels are included. 
+It was detected because if the wrong marker channel is selected, the script will crash as it cannot find markers. So this is only a problem in that it makes it harder to get the script right - it won't create other issues. Markers in files with fewer channels are in channel 9; for those with many channels, they are in channel 11. The script is now set to detect this automatically. 
 
 
 ```{r readIDs}
@@ -148,7 +149,7 @@ Process the raw data - starting point is file Data1_2_GLM_GAM.Rmd from the Thomp
 
 The following is the main function to run the analysis. The function does the following in order:
 
-PART 1:  
+## Preprocessing chunk
 
 Script takes a raw .exp datafile and preprocesses it ready for GAM analysis:  
 - It downsamples from 100 Hz to 25 Hz
@@ -157,25 +158,23 @@ Script takes a raw .exp datafile and preprocesses it ready for GAM analysis:
 - It normalises the L and R fTCD signals to a mean of 100 by dividing by respective channel mean. This adjusts for any constant differences between L and R that may relate to angle of insonation.
 - It performs heart beat integration (identified regular peaks in waveform and averages over the peak-to-peak interval). This removes a major, systematic source of variability that is of no interest.
 - It creates a channel corresponding to the epoch number
-- It performs baseline correction for each epoch separately for L and R by subtracting the mean value during the baseline period from the signal across the whole epoch. This ensures L and R are equated at the start of the epoch.
-- It saves the processed data into a .csv file  
-- The mean L and R plots after baseline correction are saved in GAM_figs_baselined 
+- It performs baseline correction for each epoch separately for L and R by subtracting the mean value during the baseline period from the signal across the whole epoch. This is only used for reproducing the original averaged analysis; it is not used in the GAM analysis.
+- If the option to plot averages is selected, the mean L and R plots after baseline correction are saved in GAM_figs_baselined 
 
-PART 2:  
-- Adds hemodynamic responses (HDR) to the file
+## Main loop  (run-analysis chunk)
+- after preprocessing, have data frame with raw data for this participant/task
 - Downsamples to have one timepoint for each heartbeat (to avoid v high autocorrelation)
 - Converts file to long form with L and R stacked on top of each other
+- runs the GAM model 
+- saves the parameter estimates to summary.data data frame. 
 
-PART 3:  
 
-- runs the GLMs  
-- saves the parameter estimates to data.frame.  
-- plots epoch-level estimates from model
 
 
 ```{r timings}
 #As we have 6 tasks, we will make a little dataframe with the timings for each task
 #A = Word Generation, B = Sentence Generation, C = Phonological Decision, D = Word Decision, E = Sentence Decision, F = Syntactic Decision) 
+#Note that Word Decision and Sentence Decision are labelled as WC and SC (from earlier version where they were labelled as comprehension tasks)
 
 #Details of tasks are here: https://www.sciencedirect.com/science/article/pii/S0010945222001605?via%3Dihub/ Timings in Figure 2.
 
@@ -546,6 +545,7 @@ MAIN ANALYSIS LOOP STARTS HERE
 
 startj<-1 #first row to analyse
 endj<-nrow(summary.data) #can override when testing by just adding line below with new value
+endj=2
 
  
 jrange<-startj:endj
@@ -606,7 +606,16 @@ for (t in 1:6){ #t is task}
 #When all subjects are done, bolt temp.data on to summary.data, after specifying the task.
 tempnames<-colnames(temp.data)
 colnames(temp.data)<-paste0(alltimings$task[t],"_",tempnames)
-summary.data<-cbind(summary.data,temp.data)
+tempnames2<-colnames(temp.data) #new column names with task prefix
+ #Have we already created these cols in summary.data?
+wantcols<- which(colnames(summary.data) % in% tempnames2)
+if(length(wantcols)==0){ #if they don't exist, add them with NA values
+  summary.data[,tempnames2]<-NA
+}
+
+  summary.data[jrange,tempnames2]<-temp.data[jrange,] #write new data in jrange
+
+
 write.csv(summary.data,here('dumpGAMsummary.csv'))
 } #next task
 
