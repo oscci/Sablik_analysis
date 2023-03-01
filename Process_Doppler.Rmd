@@ -9,6 +9,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+#some of these packages are probably not needed!
 require(tidyverse)
 require(here)
 library(osfr)
@@ -26,6 +27,7 @@ library(gratia) #tools to extend plotting and analysis of mgcv models by Pederso
 library(performance)
 library(GGally)
 library(stringr)
+library(yarrr)
 
 ```
 
@@ -55,7 +57,8 @@ myfsum <- read.csv('ftcd_COLA_summary.csv')
 #we'll prune this to make it more manageable; just retain the IDs of our sample, and delete unwanted cols.
 
 #Go through row by row to find which have record in ftcd_COLA_summary
-
+Maria <- 0 #can use same script to analyse all cases with data
+if(Maria==1){
 myIDs$Nrow.myfsum<-0
 for (r in 1:nrow(myIDs)){
   ID<-myIDs$ID[r]
@@ -65,13 +68,19 @@ for (r in 1:nrow(myIDs)){
   }
   
 }
+}
 #the last 4 did not have Doppler.
+
 
 #We now have information about the relevant rows for our participants, which is saved in myIDs.
 #We can delete the unwanted rows by just selecting these row numbers.
 
+if(Maria==1){
 myfsum<-myfsum[myIDs$Nrow.myfsum,]
 myfsum<-myfsum[order(myfsum$Gorilla_ID),] #put in numeric order - just used when checking file
+}
+#Note - a bit unfortunate that two of these did not have a signal
+#Effective N is 44
 
 #There's a lot of unnecessary data in myfsum. We'll just retain the background data and the mean LI and SE information.
 #Not essential to do this, but I do like to be able to look at the data in the View pane and it is much easier if you don't have too much stuff there.
@@ -90,13 +99,15 @@ keepcols<-which(colnames(myfsum) %in% keepnames)
 
 myfsum<-myfsum[,c(1:7,keepcols)]
 
-#Note - a bit unfortunate that two of these did not have a signal
-#Effective N is 44
+
 
 #Best to delete rows for those without data or they will create problems. Need to do for allinclusions as well as for myfsum
 w<-which(is.na(myfsum$A_N))
 myfsum<-myfsum[-w,]
 allinclusions<-allinclusions[-w,]
+#R will retain original row numbers which is v confusing, so fix this with row.names
+row.names(myfsum)<-1:nrow(myfsum)
+row.names(allinclusions)<-1:nrow(myfsum)
 
 #For compatibility with GAM analysis, create a copy of myfsum called summary.data
 #Initialise additional cols to hold results of GAM analysis
@@ -268,6 +279,7 @@ ftcd_preprocess<-function(j,path,filename1,inclusions,timings,ntrials,samplingra
   wantcols = c(2,3,4,9) #sec, L, R,marker #select columns of interest to put in shortdat
  #in some systems, there are more than 9 channels! This will relate to the settings of the Doppler recording. In this case need col 11 for marker
   if(ncol(mydata)>12){wantcols<-c(2,3,4,11)}
+   if(ncol(mydata)<9){wantcols<-c(2,3,4,7)} #and some have trigger in 7!
   #NB markers correspond to values > 100 - should be around 23 short blocks of these- can see these with plot(shortdat$V9) for sanity check here
   shortdat = data.frame(mydata[,wantcols])
   rawdata = filter(shortdat, row_number() %% 4 == 0) # downsample from 100  Hz to 25 Hz by taking every 4th point (nb we still see markers, because duration of marker signal is much longer than 4 timepoints)
@@ -546,7 +558,7 @@ MAIN ANALYSIS LOOP STARTS HERE
 
 startj<-1 #first row to analyse
 endj<-nrow(summary.data) #can override when testing by just adding line below with new value
-endj=2
+#endj<-199
 
  
 jrange<-startj:endj
@@ -576,7 +588,7 @@ for (t in 1:6){ #t is task}
     samplingrate<-alltimings$samplingrate[t]
     saveepochedavg <- 1 #when testing script can save epoched average files in Plots - this makes it run more slowly but is useful for diagnostics. 
     mypath<-here('ftcd_raw_data')
-    
+    if(sum(inclusions[j,])>11){
     myreturn<-ftcd_preprocess(j,
                               path=mypath,
                               filename1,
@@ -602,7 +614,7 @@ for (t in 1:6){ #t is task}
   
   modelout <- modelfit(j,longdata,temp.data)
  temp.data<-modelout[[1]]
-
+    }#end up here if skipping subject without data
 } #next subject
 
 #When all subjects are done, bolt temp.data on to summary.data, after specifying the task.
@@ -649,7 +661,7 @@ ggpairs(summary.data[,allcols],columnLabels = c("Orig LI", "recalc.mean.LI","GAM
 plotname<- paste0("plots/",alltimings$task[t],"_LIpairs.jpg")
 ggsave(plotname,height=6,width=6)
 }
-# 
+# NB - I used a modified version of this chunk to check if heart rate, reflected in Npts, might affect laterality. It did not - either for signed value, or for absolute value. 
 
 ```
 
@@ -745,7 +757,9 @@ for (t in 1:6){
   #find those where p of interaction is ns
   w1<-which(summary.data[wantcols2[t]]>.05)
   summary.data[w1,ncol]<-0
-  table(summary.data[,ncol],summary.data$Hand_R)   
+  mytab<-table(summary.data[,ncol],summary.data$Hand_R)   
+  print(alltimings$task[t])
+  print(mytab)
 }
 # 
 
