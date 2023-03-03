@@ -90,6 +90,12 @@ c1 <- which(colnames(myfsum)=='A1')
 c2 <- which(colnames(myfsum)=='F18')
 allinclusions<-myfsum[,c(1,c1:c2)]
 
+  #need to convert -1 to 0
+  for(c in 1:ncol(allinclusions)){
+    w<-which(allinclusions[,c]<0)
+ allinclusions[w,c]<-0
+  }
+
 #find the columns with the wanted information
 keepnames<-paste0(LETTERS[1:6],'_mean_LI')
 keepnames<-c(keepnames,paste0(LETTERS[1:6],'_mean_se'))
@@ -460,7 +466,8 @@ ftcd_preprocess<-function(j,path,filename1,inclusions,timings,ntrials,samplingra
     rawdata$heartbeatcorrected_L[w]<-NA
     rawdata$heartbeatcorrected_R[w]<-NA
   }
-  #
+  # data is not removed from file, but the heartbeatcorrected is set to NA
+  
   for (m in 1:nmarker){
     mypoints<-which(rawdata$epoch==m)
     temp<-intersect(mypoints,which(rawdata$relativetime >= timings$basestart))
@@ -556,18 +563,19 @@ MAIN ANALYSIS LOOP STARTS HERE
 #Here we will just do the GAM2 as this gives best fit in Thompson et al
 
 
-startj<-1 #first row to analyse
+startj<-5 #first row to analyse
 endj<-nrow(summary.data) #can override when testing by just adding line below with new value
-#endj<-199
+endj<-5
 
  
 jrange<-startj:endj
 
 inclusionscols<-names(allinclusions)
 
-for (t in 1:6){ #t is task}
+for (t in 1:1){ #t is task}
   thisletter<-LETTERS[t]
   inclusions<- allinclusions[,grepl(thisletter,inclusionscols)] #1, 0 or -1 marks which trials included
+
   #make a little data frame as temporary store for results before adding to summary.data
   temp.data<-data.frame(matrix(NA,nrow=nrow(summary.data),ncol=3))
   #yet more cols needed to hold GAM results
