@@ -737,13 +737,18 @@ Now check intercorrelations between tasks
 wantcols <- which(str_detect(colnames(summary.data),regex('LI.est')))
 
 
-ggpairs(summary.data[,wantcols],columnLabels = alltimings$task)
-plotname<- paste0("plots/intercorrels.jpg")
+ggpairs(summary.data[summary.data$Hand_R==0,wantcols],columnLabels = alltimings$task)
+plotname<- paste0("plots/intercorrelsLhander.jpg")
+ggsave(plotname,height=6,width=6)
+ggpairs(summary.data[summary.data$Hand_R==1,wantcols],columnLabels = alltimings$task)
+plotname<- paste0("plots/intercorrelsRhander.jpg")
 ggsave(plotname,height=6,width=6)
 
 # 
 
 ```
+
+
 
 Code each task/person as L, R or bilat and look at distributions
 
@@ -766,9 +771,39 @@ for (t in 1:6){
   w1<-which(summary.data[wantcols2[t]]>.05)
   summary.data[w1,ncol]<-0
   mytab<-table(summary.data[,ncol],summary.data$Hand_R)   
+  ptab<-prop.table(mytab,2)
   print(alltimings$task[t])
-  print(mytab)
+  print(ptab)
 }
 # 
 
 ```
+
+
+For the Cortex paper we just categorised % L on cutoff of zero. This chunk does that analysis with GAM LI
+
+```{r categories}
+#Categorise as -1 R lateralised, 0 bilateral and 1 L lateralised
+#Find cols with LI.est in the name
+wantcols <- which(str_detect(colnames(summary.data),regex('LI.est')))
+wantcols2 <- which(str_detect(colnames(summary.data),regex('p.interact')))
+
+catnames<-paste0(alltimings$task,"_latzero")
+ncol<-length(colnames(summary.data))
+for (t in 1:6){
+  ncol<-ncol+1
+  summary.data[,ncol]<-1 #initialise as left-lateralised
+  colnames(summary.data)[ncol]<-catnames[t]
+  w<-which(summary.data[,wantcols[t]]<0) #heg LI.est
+  summary.data[w,ncol]<- (-1)
+  
+  mytab<-table(summary.data[,ncol],summary.data$Hand_R)  
+  ptab<-prop.table(mytab,2)
+  print(alltimings$task[t])
+  print(ptab)
+
+}
+# 
+
+```
+Visual check : the GAM does give higher % L lateralised
